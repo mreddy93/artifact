@@ -1,0 +1,632 @@
+# Default values for artifactory.
+# This is a YAML-formatted file.
+
+# Beware when changing values here. You should know what you are doing!
+# Access the values with {{ .Values.key.subkey }}
+
+
+global: {}
+  # imagePullSecrets:
+  #   - myRegistryKeySecretName
+  # joinKey:
+  # masterKey: 
+  #joinKeySecretName: join-key
+  #masterKeySecretName: master-key
+  # customInitContainersBegin: |
+
+  # customInitContainers: |
+
+  # customVolumes: |
+
+  # customVolumeMounts: |
+
+  # customSidecarContainers: |
+
+
+initContainerImage: docker.bintray.io/alpine:3.12
+
+# Init containers
+initContainers:
+  resources: {}
+#    requests:
+#      memory: "64Mi"
+#      cpu: "10m"
+#    limits:
+#      memory: "128Mi"
+#      cpu: "250m"
+
+installer:
+  type:
+  platform:
+
+installerInfo: '{"productId": "Helm_artifactory/{{ .Chart.Version }}", "features": [ { "featureId": "Platform/{{ default "kubernetes" .Values.installer.platform }}"}]}'
+
+# For supporting pulling from private registries
+# imagePullSecrets:
+#   - myRegistryKeySecretName
+
+## Role Based Access Control
+## Ref: https://kubernetes.io/docs/admin/authorization/rbac/
+systemYaml: {}
+rbac:
+  create: true
+  role:
+    ## Rules to create. It follows the role specification
+    rules:
+    - apiGroups:
+      - ''
+      resources:
+      - services
+      - endpoints'
+      - pods
+      verbs:
+      - get
+      - watch
+      - list
+
+## Service Account
+## Ref: https://kubernetes.io/docs/admin/service-accounts-admin/
+##
+serviceAccount:
+  create: true
+  ## The name of the ServiceAccount to use.
+  ## If not set and create is true, a name is generated using the fullname template
+  name:
+  ## Service Account annotations
+  annotations: {}
+
+ingress:
+  enabled: true
+  defaultBackend:
+    enabled: true
+  # Used to create an Ingress record.
+  hosts: []
+  routerPath: /
+  artifactoryPath: /artifactory/
+  annotations: {}
+  # kubernetes.io/ingress.class: nginx
+  # nginx.ingress.kubernetes.io/configuration-snippet: |
+  #   proxy_pass_header   Server;
+  #   proxy_set_header    X-JFrog-Override-Base-Url https://<artifactory-domain>;
+  # kubernetes.io/tls-acme: "true"
+  # nginx.ingress.kubernetes.io/proxy-body-size: "0"
+  labels: {}
+  # traffic-type: external
+  # traffic-type: internal
+  tls: []
+  # Secrets must be manually created in the namespace.
+  # - secretName: chart-example-tls
+  #   hosts:
+  #     - artifactory.domain.example
+
+  # Additional ingress rules
+  additionalRules: []
+
+networkpolicy:
+- name: artifactory
+  podSelector:
+    matchLabels:
+      app: artifactory
+  egress:
+  - {}
+  ingress:
+  - {}
+- name: postgres
+  podSelector:
+    matchLabels:
+      app: postgresql
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: artifactory
+
+# Artifactory
+artifactory:
+  name: artifactory
+  # Note that by default we use appVersion to get image tag/version
+  image:
+    registry: docker.bintray.io
+    repository: jfrog/artifactory-pro
+    tag: 7.11.5
+    pullPolicy: IfNotPresent
+  labels: {}
+
+  # Create a priority class for the :Artifactory pod or use an existing one
+  # NOTE - Maximum allowed value of a user defined priority is 1000000000
+  priorityClass:
+    create: true
+    value: 1000000000
+    ## Override default name
+    # name:
+    ## Use an existing priority class
+    # existingPriorityClass:
+
+  # Delete the db.properties file in ARTIFACTORY_HOME/etc/db.properties
+  deleteDBPropertiesOnStartup: true
+
+  database:
+    maxOpenConnections: 300
+  tomcat:
+    connector:
+      maxThreads: 600
+      extraConfig: 'acceptCount="100"'
+
+  # Files to copy to ARTIFACTORY_HOME/ on each Artifactory startup
+  copyOnEveryStartup:
+  #  # Absolute path
+  #  - source: /artifactory_bootstrap/binarystore.xml
+  #   # Relative to ARTIFACTORY_HOME/
+  #    target: etc/artifactory/
+  #  # Absolute path
+  #  - source: /artifactory_bootstrap/artifactory.lic
+  #    # Relative to ARTIFACTORY_HOME/
+  #    target: etc/artifactory/
+
+  migration:
+    enabled: true
+    timeoutSeconds: 3600
+    ## Extra pre-start command in migration Init Container to install JDBC driver for MySql/MariaDb/Oracle
+    # preStartCommand: "mkdir -p /opt/jfrog/artifactory/var/bootstrap/artifactory/tomcat/lib; cd /opt/jfrog/artifactory/var/bootstrap/artifactory/tomcat/lib && wget -O /opt/jfrog/artifactory/var/bootstrap/artifactory/tomcat/lib/mysql-connector-java-5.1.41.jar https://jcenter.bintray.com/mysql/mysql-connector-java/5.1.41/mysql-connector-java-5.1.41.jar"
+
+## Add custom init containers execution before predefined init containers
+  customInitContainersBegin: {}
+  customInitContainers: {}
+  customVolumes: {}
+  customVolumeMounts: {}
+  customPersistentPodVolumeClaim: {}
+  #  name:
+  #  mountPath:
+  #  accessModes:
+  #   - "-"
+  #  size:
+  #  storageClassName:
+  #  skipPrepareContainer: false
+
+  # Add custom persistent volume mounts - Available to the entire namespace
+  customPersistentVolumeClaim: {}
+  #  name:
+  #  mountPath:
+  #  accessModes:
+  #   - "-"
+  #  size:
+  #  storageClassName:
+
+  license:
+    ## licenseKey is the license key in plain text. Use either this or the license.secret setting
+    licenseKey:
+    ## If artifactory.license.secret is passed, it will be mounted as
+    ## ARTIFACTORY_HOME/etc/artifactory.lic and loaded at run time.
+    secret:
+    ## The dataKey should be the name of the secret data key created.
+    dataKey:
+
+  ## Create configMap with artifactory.config.import.xml and security.import.xml and pass name of configMap in following parameter
+  configMapName:
+
+  # Add any list of configmaps to Artifactory
+  configMaps: |
+  #  posthook-start.sh: |-
+  #    echo "This is a post start script"
+  #  posthook-end.sh: |-
+  #    echo "This is a post end script"
+
+  ## List of secrets for Artifactory user plugins.
+  ## One Secret per plugin's files.
+  userPluginSecrets:
+  #  - archive-old-artifacts
+  #  - build-cleanup
+  #  - webhook
+  #  - '{{ template "my-chart.fullname" . }}'
+
+  ## Artifactory requires a unique master key.
+  ## You can generate one with the command: "openssl rand -hex 32"
+  ## An initial one is auto generated by Artifactory on first startup.
+  # masterKey: FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+  ## Alternatively, you can use a pre-existing secret with a key called master-key by specifying masterKeySecretName
+  masterKeySecretName: masterkey
+
+  ## Join Key to connect other services to Artifactory
+  ## IMPORTANT: Setting this value overrides the existing joinKey
+  ## IMPORTANT: You should NOT use the example joinKey for a production deployment!
+  #joinKey: EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE 
+  ## Alternatively, you can use a pre-existing secret with a key called join-key by specifying joinKeySecretName
+  joinKeySecretName: joinkey
+
+  # Add custom secrets - secret per file
+  customSecrets:
+  #  - name: custom-secret
+  #    key: custom-secret.yaml
+  #    data: >
+  #      custom_secret_config:
+  #        parameter1: value1
+  #        parameter2: value2
+  #  - name: custom-secret2
+  #    key: custom-secret2.config
+  #    data: |
+  #      here the custom secret 2 config
+
+  ## If false, all service console logs will not redirect to a common console.log
+  consoleLog: false
+
+  binarystore:
+    enabled: true
+
+  ## admin allows to set the password for the default admin user.
+  ## See: https://www.jfrog.com/confluence/display/JFROG/Users+and+Groups#UsersandGroups-RecreatingtheDefaultAdminUserrecreate
+  admin:
+    ip: "0.0.0.0"
+    username: "admin"
+    password:
+    secret:
+    dataKey:
+
+  ## Extra pre-start command to install JDBC driver for MySql/MariaDb/Oracle
+  # preStartCommand: "mkdir -p /opt/jfrog/artifactory/var/bootstrap/artifactory/tomcat/lib; cd /opt/jfrog/artifactory/var/bootstrap/artifactory/tomcat/lib && wget -O /opt/jfrog/artifactory/var/bootstrap/artifactory/tomcat/lib/mysql-connector-java-5.1.41.jar https://jcenter.bintray.com/mysql/mysql-connector-java/5.1.41/mysql-connector-java-5.1.41.jar"
+  ## Extra post-start command to run extra commands after container starts
+  # postStartCommand:
+
+  ## Extra environment variables that can be used to tune Artifactory to your needs.
+  ## Uncomment and set value as needed
+  extraEnvironmentVariables:
+  # - name: SERVER_XML_ARTIFACTORY_PORT
+  #   value: "8081"
+  # - name: SERVER_XML_ARTIFACTORY_MAX_THREADS
+  #   value: "200"
+  # - name: SERVER_XML_ACCESS_MAX_THREADS
+  #   value: "50"
+  # - name: SERVER_XML_ARTIFACTORY_EXTRA_CONFIG
+  #   value: ""
+  # - name: SERVER_XML_ACCESS_EXTRA_CONFIG
+  #   value: ""
+  # - name: SERVER_XML_EXTRA_CONNECTOR
+  #   value: ""
+  # - name: DB_POOL_MAX_ACTIVE
+  #   value: "100"
+  # - name: DB_POOL_MAX_IDLE
+  #   value: "10"
+  # - name: MY_SECRET_ENV_VAR
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: my-secret-name
+  #       key: my-secret-key
+
+  systemYaml: |
+    shared:
+      logging:
+        consoleLog:
+          enabled: {{ .Values.artifactory.consoleLog }}
+      extraJavaOpts: >
+        -Dartifactory.access.client.max.connections={{ .Values.access.tomcat.connector.maxThreads }}
+      {{- with .Values.artifactory.javaOpts }}
+        -Dartifactory.async.corePoolSize={{ .corePoolSize }}
+      {{- if .xms }}
+        -Xms{{ .xms }}
+      {{- end }}
+      {{- if .xmx }}
+        -Xmx{{ .xmx }}
+      {{- end }}
+      {{- if .jmx.enabled }}
+        -Dcom.sun.management.jmxremote
+        -Dcom.sun.management.jmxremote.port={{ .jmx.port }}
+        -Dcom.sun.management.jmxremote.rmi.port={{ .jmx.port }}
+        -Dcom.sun.management.jmxremote.ssl={{ .jmx.ssl }}
+      {{- if .jmx.host }}
+        -Djava.rmi.server.hostname={{ tpl .jmx.host $ }}
+      {{- else }}
+        -Djava.rmi.server.hostname={{ template "artifactory.fullname" $ }}
+      {{- end }}
+      {{- if .jmx.authenticate }}
+        -Dcom.sun.management.jmxremote.authenticate=true
+        -Dcom.sun.management.jmxremote.access.file={{ .jmx.accessFile }}
+        -Dcom.sun.management.jmxremote.password.file={{ .jmx.passwordFile }}
+      {{- else }}
+        -Dcom.sun.management.jmxremote.authenticate=false
+      {{- end }}
+      {{- end }}
+      {{- if .other }}
+        {{ .other }}
+      {{- end }}
+      {{- end }}
+      {{- if or .Values.database.type .Values.postgresql.enabled }}
+      database:
+        {{- if .Values.postgresql.enabled }}
+        type: postgresql
+        url: "jdbc:postgresql://{{ .Release.Name }}-postgresql:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.postgresqlDatabase }}"
+        driver: org.postgresql.Driver
+        username: "{{ .Values.postgresql.postgresqlUsername }}"
+        password: "{{ .Values.postgresql.postgresqlPassword }}"
+        {{- else }}
+        type: "{{ .Values.database.type }}"
+        driver: "{{ .Values.database.driver }}"
+        {{- end }}
+      {{- end }}
+    artifactory:
+      database:
+        maxOpenConnections: {{ .Values.artifactory.database.maxOpenConnections }}
+      tomcat:
+        connector:
+          maxThreads: {{ .Values.artifactory.tomcat.connector.maxThreads }}
+          extraConfig: {{ .Values.artifactory.tomcat.connector.extraConfig }}
+    frontend:
+      session:
+        timeMinutes: {{ .Values.frontend.session.timeoutMinutes | quote }}
+    access:
+      database:
+        maxOpenConnections: {{ .Values.access.database.maxOpenConnections }}
+      tomcat:
+        connector:
+          maxThreads: {{ .Values.access.tomcat.connector.maxThreads }}
+          extraConfig: {{ .Values.access.tomcat.connector.extraConfig }}
+    metadata:
+      database:
+        maxOpenConnections: {{ .Values.metadata.database.maxOpenConnections }}
+    {{- if .Values.artifactory.replicator.enabled }}
+    replicator:
+      enabled: true
+    {{- end }}
+
+  annotations: {}
+
+  service:
+    name: artifactory
+    type: ClusterIP
+    ## For supporting whitelist on the Artifactory service (useful if setting service.type=LoadBalancer)
+    ## Set this to a list of IP CIDR ranges
+    ## Example: loadBalancerSourceRanges: ['10.10.10.5/32', '10.11.10.5/32']
+    ## or pass from helm command line
+    ## Example: helm install ... --set nginx.service.loadBalancerSourceRanges='{10.10.10.5/32,10.11.10.5/32}'
+    loadBalancerSourceRanges: []
+    annotations: {}
+
+  ## The following setting are to configure a dedicated Ingress object for Replicator service
+  replicator:
+    enabled: false
+    ingress:
+      name:
+      hosts: []
+      annotations: {}
+       # kubernetes.io/ingress.class: nginx
+       # nginx.ingress.kubernetes.io/proxy-buffering: "off"
+       # nginx.ingress.kubernetes.io/configuration-snippet: |
+       #   chunked_transfer_encoding on;
+      tls: []
+       #  Secrets must be manually created in the namespace.
+       # - hosts:
+       #   - artifactory.domain.example
+       #   secretName: chart-example-tls-secret
+
+  ## IMPORTANT: If overriding artifactory.internalPort:
+  ## DO NOT use port lower than 1024 as Artifactory runs as non-root and cannot bind to ports lower than 1024!
+  externalPort: 8082
+  internalPort: 8082
+  externalArtifactoryPort: 8081
+  internalArtifactoryPort: 8081
+  uid: 1030
+  terminationGracePeriodSeconds: 30
+
+  ## The following settings are to configure the frequency of the liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    path: /router/api/v1/system/health
+    initialDelaySeconds: 180
+    failureThreshold: 10
+    timeoutSeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+
+  readinessProbe:
+    enabled: true
+    path: /router/api/v1/system/health
+    initialDelaySeconds: 90
+    failureThreshold: 10
+    timeoutSeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+
+  persistence:
+    mountPath: "/var/opt/jfrog/artifactory"
+    enabled: true
+    ## A manually managed Persistent Volume and Claim
+    ## Requires persistence.enabled: true
+    ## If defined, PVC must be created manually before volume will be bound
+    # existingClaim:
+
+    accessMode:
+    ## Storage default size. Should be increased for production deployments.
+    size: 
+
+    ## Use a custom Secret to be mounted as your binarystore.xml
+    ## NOTE: This will ignore all settings below that make up binarystore.xml
+    customBinarystoreXmlSecret:
+    ## Cache default size. Should be increased for production deployments.
+    maxCacheSize: 5000000000
+    cacheProviderDir: cache
+
+    ## Set the persistence storage type. This will apply the matching binarystore.xml to Artifactory config
+    type: file-system
+
+    ## Use binarystoreXml to provide a custom binarystore.xml
+    ## This can be a template or hardcoded.
+    binarystoreXml: |
+      {{- if eq .Values.artifactory.persistence.type "file-system" -}}
+      <!-- File system filestore -->
+      <config version="v1">
+          <chain>
+            {{- if .Values.artifactory.persistence.fileSystem.cache.enabled }}
+              <provider id="cache-fs" type="cache-fs">
+            {{- end }}
+                  <provider id="file-system" type="file-system"/>
+            {{- if .Values.artifactory.persistence.fileSystem.cache.enabled }}
+              </provider>
+            {{- end }}
+          </chain>
+
+        {{- if .Values.artifactory.persistence.fileSystem.cache.enabled }}
+          <provider id="cache-fs" type="cache-fs">
+              <maxCacheSize>{{ .Values.artifactory.persistence.maxCacheSize }}</maxCacheSize>
+              <cacheProviderDir>{{ .Values.artifactory.persistence.cacheProviderDir }}</cacheProviderDir>
+          </provider>
+        {{- end }}
+      </config>
+      {{- end }}
+    
+    ## For artifactory.persistence.type nfs
+    ## If using NFS as the shared storage, you must have a running NFS server that is accessible by your Kubernetes
+    ## cluster nodes.
+    ## Need to have the following set
+    nfs:
+      # Must pass actual IP of NFS server with '--set For artifactory.persistence.nfs.ip=${NFS_IP}'
+      #ip:
+              #haDataMount: "/data"
+              #haBackupMount: "/backup"
+              #dataDir: "/var/opt/jfrog/artifactory"
+              #backupDir: "/var/opt/jfrog/artifactory-backup"
+              #capacity: 200Gi 
+
+    ## For artifactory.persistence.type file-system
+    fileSystem:
+      cache:
+        enabled: false
+
+    annotations: {}
+  ## Uncomment the following resources definitions or pass them from command line
+  ## to control the cpu and memory resources allocated by the Kubernetes cluster
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2"
+    limits:
+      memory: "6Gi"
+      cpu: "4"
+  ## The following Java options are passed to the java process running Artifactory.
+  ## You should set them according to the resources set above
+  javaOpts: 
+    xms: "4g"
+    xmx: "4g"
+    jmx:
+      enabled: false
+      port: 9010
+      host:
+      ssl: false
+      # When authenticate is true, accessFile and passwordFile are required
+      authenticate: false
+      accessFile:
+      passwordFile:
+    corePoolSize: 8
+   # other: ""
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  ssh:
+    enabled: false
+    internalPort: 1339
+    externalPort: 1339
+
+frontend:
+  ## Session settings
+  session:
+    ## Time in minutes after which the frontend token will need to be refreshed
+    timeoutMinutes: '30'
+
+access:
+  ## Enable TLS by changing the tls entry (under the security section) in the access.config.yaml file.
+  ## ref: https://www.jfrog.com/confluence/display/JFROG/Managing+TLS+Certificates#ManagingTLSCertificates
+  ## When security.tls is set to true, JFrog Access will act as the Certificate Authority (CA) and sign the TLS certificates used by all the different JFrog Platform nodes.
+  ## This ensures that the node to node communication is done over TLS.
+  accessConfig:
+    security:
+      tls: false
+
+  ## You can use a pre-existing secret by specifying customCertificatesSecretName
+  ## Example : Create a tls secret using `kubectl create secret tls <secret-name> --cert=ca.crt --key=ca.private.key`
+  # customCertificatesSecretName:
+
+  ## When resetAccessCAKeys is true, Access will regenerate the CA certificate and matching private key
+  # resetAccessCAKeys: false
+  database:
+    maxOpenConnections: 300
+  tomcat:
+    connector:
+      maxThreads: 600
+      extraConfig: 'acceptCount="100"'
+
+metadata:
+  database:
+    maxOpenConnections: 300
+
+nginx:
+  enabled: false
+  service:
+    type: NodePort
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+## Database configurations
+## Use the wait-for-db init container. Set to false to skip
+waitForDatabase: true
+
+## Configuration values for the PostgreSQL dependency sub-chart
+## ref: https://github.com/bitnami/charts/blob/master/bitnami/postgresql/README.md
+postgresql:
+  enabled: true
+  image:
+    registry: docker.bintray.io
+    repository: bitnami/postgresql
+    tag: 12.3.0-debian-10-r71
+  postgresqlUsername: artifactory
+  postgresqlPassword: 
+  postgresqlDatabase: artifactory
+  postgresqlExtendedConf:
+    listenAddresses: "'*'"
+    maxConnections: "1500"
+  persistence:
+    enabled: true
+    size: 30Gi
+  service:
+    port: 5432
+  master:
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+  slave:
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2"
+    limits:
+      memory: "6Gi"
+      cpu: "4"
+
+## If NOT using the PostgreSQL in this chart (postgresql.enabled=false),
+## specify custom database details here or leave empty and Artifactory will use embedded derby
+database: 
+  type:
+  driver:
+  ## If you set the url, leave host and port empty
+  url:
+  secrets: {}
+# Filebeat Sidecar container
+## The provided filebeat configuration is for Artifactory logs. It assumes you have a logstash installed and configured properly.
+filebeat:
+  enabled: false
+## Prometheus Exporter / Metrics
+##
+metrics:
+  enabled: false
+## Fluentd Sidecar Container
+##
+fluentd:
+  enabled: false
+  fluentdConf: {}
+
